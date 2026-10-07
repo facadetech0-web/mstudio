@@ -36,10 +36,15 @@ class CogVideoX2BModel(VideoModel):
             torch.cuda.reset_peak_memory_stats()
             torch.cuda.empty_cache()
 
+        # Persistent cache directory to prevent re-downloading across runs
+        cache_dir = Path(settings.MODEL_DIR) / "hf_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
         # Load pipeline
         self.pipeline = CogVideoXPipeline.from_pretrained(
             self.model_id,
-            torch_dtype=torch_dtype
+            torch_dtype=torch_dtype,
+            cache_dir=str(cache_dir)
         )
 
         # Apply T4 performance optimizations

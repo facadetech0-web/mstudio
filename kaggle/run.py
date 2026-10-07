@@ -12,6 +12,9 @@ os.environ["ENABLE_CPU_OFFLOAD"] = "false"
 os.environ["ENABLE_VAE_TILING"] = "true"
 os.environ["ENABLE_VAE_SLICING"] = "true"
 os.environ["PYTHONPATH"] = f"{os.getcwd()}:{os.environ.get('PYTHONPATH', '')}"
+os.environ["HF_HOME"] = os.path.abspath("models/hf_cache")
+os.environ["TRANSFORMERS_CACHE"] = os.path.abspath("models/hf_cache")
+os.environ["DIFFUSERS_CACHE"] = os.path.abspath("models/hf_cache")
 
 print("=" * 60)
 print("🎬 INITIALIZING AI MOVIE STUDIO ON KAGGLE (T4 16GB)")

@@ -24,11 +24,34 @@ class ModelManager:
         self.active_model_name: Optional[str] = None
         self._register_default_models()
 
+    def _find_model_path(self, target_name: str, fallback_hf_id: str) -> str:
+        """
+        Finds pre-cached model weights across:
+        1. /kaggle/input (Attached Kaggle Datasets - 0s download!)
+        2. Local MODEL_DIR (e.g. models/cogvideox-2b)
+        3. Hugging Face repo ID with persistent disk cache
+        """
+        # 1. Scan /kaggle/input for attached Kaggle Datasets
+        kaggle_input = Path("/kaggle/input")
+        if kaggle_input.exists():
+            for p in kaggle_input.rglob("*"):
+                if p.is_dir() and target_name.lower().replace("-", "") in p.name.lower().replace("-", ""):
+                    if (p / "model_index.json").exists() or (p / "transformer").exists() or (p / "vae").exists():
+                        generation_logger.info(f"⚡ Found pre-cached {target_name} in Kaggle Dataset: {p}")
+                        return str(p)
+
+        # 2. Check local MODEL_DIR
+        local_dir = Path(settings.MODEL_DIR) / target_name
+        if local_dir.exists() and ((local_dir / "model_index.json").exists() or (local_dir / "transformer").exists()):
+            generation_logger.info(f"⚡ Found local {target_name} in {local_dir}")
+            return str(local_dir)
+
+        # 3. Default to HuggingFace repo ID
+        return fallback_hf_id
+
     def _register_default_models(self):
-        # Check if local weights exist in MODEL_DIR or use Hugging Face repos
-        model_dir = Path(settings.MODEL_DIR)
-        cog2b_path = str(model_dir / "cogvideox-2b") if (model_dir / "cogvideox-2b").exists() else "THUDM/CogVideoX-2b"
-        cog5b_path = str(model_dir / "cogvideox-5b-i2v") if (model_dir / "cogvideox-5b-i2v").exists() else "THUDM/CogVideoX-5b-I2V"
+        cog2b_path = self._find_model_path("cogvideox-2b", "THUDM/CogVideoX-2b")
+        cog5b_path = self._find_model_path("cogvideox-5b-i2v", "THUDM/CogVideoX-5b-I2V")
 
         self.models["cogvideox-2b"] = CogVideoX2BModel(
             model_path_or_id=cog2b_path,

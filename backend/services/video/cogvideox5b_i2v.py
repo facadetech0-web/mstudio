@@ -38,10 +38,15 @@ class CogVideoX5BI2VModel(VideoModel):
             torch.cuda.reset_peak_memory_stats()
             torch.cuda.empty_cache()
 
+        # Persistent cache directory to prevent re-downloading across runs
+        cache_dir = Path(settings.MODEL_DIR) / "hf_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
         # Load pipeline in fp16
         self.pipeline = CogVideoXImageToVideoPipeline.from_pretrained(
             self.model_id,
-            torch_dtype=torch_dtype
+            torch_dtype=torch_dtype,
+            cache_dir=str(cache_dir)
         )
 
         # On T4 16GB, CogVideoX-5B must use sequential CPU offload or model offload with VAE tiling
