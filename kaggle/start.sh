@@ -20,32 +20,59 @@ fi
 
 mkdir -p logs
 
-# Start Free Cloudflare Tunnel in background (No account, token, or signup needed)
-if command -v cloudflared &> /dev/null; then
-    echo "Starting Free Cloudflare Tunnel..."
-    cloudflared tunnel --url http://127.0.0.1:8000 --no-autoupdate > logs/tunnel.log 2>&1 &
-    
-    # Wait for tunnel URL generation
-    echo "Waiting for Cloudflare Tunnel URL..."
-    for i in {1..15}; do
-        TUNNEL_URL=$(grep -o 'https://[-a-zA-Z0-9.]*\.trycloudflare\.com' logs/tunnel.log | head -n 1 || true)
-        if [ -n "$TUNNEL_URL" ]; then
+# Auto-install cloudflared if missing from PATH
+if ! command -v cloudflared &> /dev/null; then
+    echo "cloudflared not found. Downloading and installing Cloudflare Tunnel..."
+    wget -q -O /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+    dpkg -i /tmp/cloudflared.deb > /dev/null 2>&1 || true
+    rm -f /tmp/cloudflared.deb
+fi
+
+# Kill any stale cloudflared instances from previous notebook runs
+pkill -f cloudflared 2>/dev/null || true
+sleep 1
+rm -f logs/tunnel.log
+
+echo "Starting Free Cloudflare Tunnel..."
+cloudflared tunnel --url http://127.0.0.1:8000 --no-autoupdate > logs/tunnel.log 2>&1 &
+
+# Persistent background watcher to catch and print URL the instant it is generated
+(
+    for i in {1..30}; do
+        URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' logs/tunnel.log 2>/dev/null | head -n 1 || true)
+        if [ -n "$URL" ]; then
+            echo ""
+            echo "=========================================================="
+            echo "🎬 AI MOVIE STUDIO IS LIVE AT: $URL"
+            echo "=========================================================="
+            echo ""
             break
         fi
         sleep 1
     done
+) &
 
-    echo "=========================================================="
-    if [ -n "$TUNNEL_URL" ]; then
-        echo "🎬 AI MOVIE STUDIO IS LIVE AT: $TUNNEL_URL"
-    else
-        echo "Cloudflare Tunnel log:"
-        cat logs/tunnel.log
+# Synchronous wait up to 15 seconds to print URL before server logs
+echo "Waiting for Cloudflare Tunnel URL..."
+TUNNEL_URL=""
+for i in {1..15}; do
+    if [ -f logs/tunnel.log ]; then
+        TUNNEL_URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' logs/tunnel.log | head -n 1 || true)
+        if [ -n "$TUNNEL_URL" ]; then
+            break
+        fi
     fi
-    echo "=========================================================="
+    sleep 1
+done
+
+echo "=========================================================="
+if [ -n "$TUNNEL_URL" ]; then
+    echo "🎬 AI MOVIE STUDIO IS LIVE AT: $TUNNEL_URL"
 else
-    echo "Notice: cloudflared not found in PATH. Install via bash kaggle/setup.sh"
+    echo "Cloudflare Tunnel is connecting in background..."
+    echo "Watch for the URL in the output or run: cat logs/tunnel.log"
 fi
+echo "=========================================================="
 
 # Run backend on port 8000
 echo "Starting FastAPI backend server..."
