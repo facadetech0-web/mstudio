@@ -3,10 +3,15 @@
 set -e
 
 echo "=== [1/5] Checking GPU Environment ==="
-nvidia-smi || echo "Warning: No NVIDIA GPU detected. Please ensure GPU accelerator (T4 x2 or T4) is enabled in Kaggle Settings."
+if command -v nvidia-smi &> /dev/null; then
+    nvidia-smi
+else
+    echo "Notice: nvidia-smi command not found. Ensure Accelerator: GPU T4 x2 or GPU T4 is enabled in the right panel of your Kaggle notebook."
+fi
 
 echo "=== [2/5] Installing System Dependencies (FFmpeg & Cloudflare Tunnel) ==="
-apt-get update -qq && apt-get install -y -qq ffmpeg wget curl
+apt-get update -qq || true
+apt-get install -y -qq --fix-missing ffmpeg wget curl || true
 
 if ! command -v cloudflared &> /dev/null; then
     echo "Downloading and installing Cloudflare Tunnel (cloudflared)..."

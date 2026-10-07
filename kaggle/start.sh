@@ -4,9 +4,10 @@ set -e
 
 export DEVICE="cuda"
 export DTYPE="float16"
-export ENABLE_CPU_OFFLOAD="true"
+export ENABLE_CPU_OFFLOAD="false"
 export ENABLE_VAE_TILING="true"
 export ENABLE_VAE_SLICING="true"
+export PYTHONPATH="$(pwd):$PYTHONPATH"
 
 echo "=== Starting AI Movie Studio on Kaggle (T4 16GB) ==="
 echo "CUDA Available: $(python -c 'import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else "None")')"

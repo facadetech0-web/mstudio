@@ -19,10 +19,11 @@ frontend/node_modules/
 *.db
 *.sqlite
 *.sqlite3
-outputs/
-logs/
-projects/
-models/
+/outputs/
+/logs/
+/projects/
+/models/
+!backend/models/
 
 # Large archives and temporary files
 *.zip
