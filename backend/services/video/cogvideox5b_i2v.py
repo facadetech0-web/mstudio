@@ -3,6 +3,7 @@ import gc
 import time
 from typing import Dict, Any, Optional, Callable
 from pathlib import Path
+from backend.config import settings
 from backend.services.video.base import VideoModel
 from backend.logging_config import generation_logger
 
