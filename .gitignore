@@ -1,0 +1,32 @@
+# Environment and credentials
+.env
+*.env.local
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node and frontend
+frontend/node_modules/
+# Keep frontend/dist tracked so Kaggle doesn't need npm/Node.js to run the web UI!
+!frontend/dist/
+
+# Local databases and runtime data
+*.db
+*.sqlite
+*.sqlite3
+outputs/
+logs/
+projects/
+models/
+
+# Large archives and temporary files
+*.zip
+*.tar.gz
+*.deb
+.DS_Store
+Thumbs.db
