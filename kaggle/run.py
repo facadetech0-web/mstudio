@@ -17,7 +17,19 @@ os.environ["TRANSFORMERS_CACHE"] = os.path.abspath("models/hf_cache")
 os.environ["DIFFUSERS_CACHE"] = os.path.abspath("models/hf_cache")
 
 print("=" * 60)
-print("🎬 INITIALIZING AI MOVIE STUDIO ON KAGGLE (T4 16GB)")
+print("🎬 INITIALIZING AI MOVIE STUDIO ON KAGGLE")
+try:
+    import torch
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        print(f"✅ GPU ACCELERATOR: {gpu_name} ({vram_gb:.1f} GB VRAM)")
+    else:
+        print("⚠️ WARNING: NO GPU ACTIVE (CPU MODE)")
+        print("👉 In Kaggle right panel under 'Notebook options' -> 'Accelerator'")
+        print("   Change from 'None' to 'GPU T4' or 'GPU T4 x2'")
+except Exception:
+    pass
 print("=" * 60)
 
 # 1. Check/Install Cloudflare Tunnel

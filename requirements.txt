@@ -10,14 +10,15 @@ aiofiles>=23.2.1
 SQLAlchemy>=2.0.28
 
 # PyTorch & HuggingFace Diffusers for Video Generation
-torch>=2.2.0
+# (torch & torchvision are pre-installed with CUDA on Kaggle; do not overwrite)
+# torch>=2.2.0
+# torchvision>=0.17.0
 accelerate>=0.28.0
 diffusers>=0.30.0
 transformers>=4.44.0
 sentencepiece>=0.2.0
 imageio>=2.34.0
 imageio-ffmpeg>=0.4.9
-torchvision>=0.17.0
 psutil>=5.9.8
 
 # Testing
