@@ -8,7 +8,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+# dist is tracked so Kaggle doesn't need npm/node to serve the frontend
+# dist
 dist-ssr
 *.local
 
