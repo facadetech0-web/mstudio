@@ -40,6 +40,34 @@ try:
     print(f"💾 DISK SPACE: {disk_free:.1f} GB free")
 except Exception:
     pass
+
+# Auto-detect OpenRouter API Key from Kaggle Secrets if available
+if not os.environ.get("OPENROUTER_API_KEY"):
+    try:
+        from kaggle_secrets import UserSecretsClient
+        user_secrets = UserSecretsClient()
+        secret_key = user_secrets.get_secret("OPENROUTER_API_KEY")
+        if secret_key:
+            os.environ["OPENROUTER_API_KEY"] = secret_key
+    except Exception:
+        pass
+
+if os.environ.get("OPENROUTER_API_KEY"):
+    print("🔑 OPENROUTER AI: Key Loaded Successfully ✅")
+else:
+    print("ℹ️ OPENROUTER AI: Set key in notebook or studio UI")
+
+# Check for attached Kaggle Datasets
+kaggle_input = Path("/kaggle/input")
+if kaggle_input.exists():
+    found_dataset = False
+    for p in kaggle_input.rglob("*"):
+        if p.is_dir() and "5b" in p.name.lower() and "cog" in p.name.lower():
+            print(f"⚡ DATASET MOUNT: Found attached {p.name} (0-second load!)")
+            found_dataset = True
+            break
+    if not found_dataset:
+        print("💡 TIP: Attach 'cogvideox-5b-i2v' in Kaggle Datasets for 0s loading")
 print("=" * 60)
 
 # 1. Check/Install Cloudflare Tunnel
