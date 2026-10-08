@@ -12,6 +12,8 @@ os.environ["ENABLE_CPU_OFFLOAD"] = "true"
 os.environ["ENABLE_VAE_TILING"] = "true"
 os.environ["ENABLE_VAE_SLICING"] = "true"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 os.environ["PYTHONPATH"] = f"{os.getcwd()}:{os.environ.get('PYTHONPATH', '')}"
 os.environ["HF_HOME"] = os.path.abspath("models/hf_cache")
 os.environ["TRANSFORMERS_CACHE"] = os.path.abspath("models/hf_cache")
@@ -29,6 +31,13 @@ try:
         print("⚠️ WARNING: NO GPU ACTIVE (CPU MODE)")
         print("👉 In Kaggle right panel under 'Notebook options' -> 'Accelerator'")
         print("   Change from 'None' to 'GPU T4' or 'GPU T4 x2'")
+except Exception:
+    pass
+
+import shutil
+try:
+    disk_free = shutil.disk_usage(".").free / (1024**3)
+    print(f"💾 DISK SPACE: {disk_free:.1f} GB free")
 except Exception:
     pass
 print("=" * 60)

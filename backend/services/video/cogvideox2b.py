@@ -37,9 +37,19 @@ class CogVideoX2BModel(VideoModel):
             torch.cuda.reset_peak_memory_stats()
             torch.cuda.empty_cache()
 
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+
         # Persistent cache directory to prevent re-downloading across runs
         cache_dir = Path(settings.MODEL_DIR) / "hf_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            for incomplete_file in cache_dir.glob("**/*.incomplete"):
+                if incomplete_file.is_file():
+                    incomplete_file.unlink(missing_ok=True)
+        except Exception:
+            pass
 
         # Load pipeline
         self.pipeline = CogVideoXPipeline.from_pretrained(

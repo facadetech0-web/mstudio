@@ -33,6 +33,11 @@ class CogVideoX5BI2VModel(VideoModel):
 
         torch_dtype = torch.float16 if self.dtype == "float16" and torch.cuda.is_available() else torch.float32
 
+        # Disable unstable HF Xet transfer protocol which causes 'Background writer channel closed'
+        os.environ["HF_HUB_DISABLE_XET"] = "1"
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
         from diffusers import CogVideoXImageToVideoPipeline
 
         if torch.cuda.is_available():
@@ -43,7 +48,28 @@ class CogVideoX5BI2VModel(VideoModel):
         cache_dir = Path(settings.MODEL_DIR) / "hf_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load pipeline in fp16
+        # Clean up any corrupt or interrupted .incomplete files from previous failed downloads
+        try:
+            for incomplete_file in cache_dir.glob("**/*.incomplete"):
+                if incomplete_file.is_file():
+                    incomplete_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        # Check available disk space
+        import shutil
+        try:
+            free_gb = shutil.disk_usage(str(cache_dir)).free / (1024**3)
+            generation_logger.info(f"Available disk space for CogVideoX-5B: {free_gb:.1f} GB")
+            if free_gb < 12.0 and not Path(self.model_id).exists():
+                generation_logger.warning(
+                    f"⚠️ Low disk space ({free_gb:.1f}GB). Downloading 5B (~15GB) may exceed Kaggle 20GB disk limit. "
+                    "Recommendation: Attach CogVideoX-5b-I2V as a Kaggle Dataset in /kaggle/input for 0-second 0-disk loading."
+                )
+        except Exception:
+            pass
+
+        # Load pipeline in fp16 with standard robust HTTP downloader
         self.pipeline = CogVideoXImageToVideoPipeline.from_pretrained(
             self.model_id,
             torch_dtype=torch_dtype,

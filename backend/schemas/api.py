@@ -172,6 +172,7 @@ class GenerateRequest(BaseModel):
     frames: Optional[int] = 49
     seed: Optional[int] = None
     low_vram: Optional[bool] = False
+    model: Optional[str] = None
     negative_prompt: Optional[str] = None
     lora_path: Optional[str] = None
 
