@@ -17,7 +17,8 @@ interface GenerationPanelProps {
     frames?: number,
     seed?: number,
     negativePrompt?: string,
-    loraPath?: string
+    loraPath?: string,
+    promptFallback?: string
   ) => void;
   onEnhancePrompt: (raw: string) => Promise<{ image: string; video: string } | null>;
   isGenerating: boolean;
@@ -98,7 +99,8 @@ export const GenerationPanel: React.FC<GenerationPanelProps> = ({
       frames,
       seed ? parseInt(seed, 10) : undefined,
       negativePrompt.trim() || undefined,
-      loraPath.trim() || undefined
+      loraPath.trim() || undefined,
+      activeClipPrompt.trim() || storyPrompt.trim()
     );
   };
 

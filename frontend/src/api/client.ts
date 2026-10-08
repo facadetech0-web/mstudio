@@ -302,5 +302,34 @@ export const apiClient = {
       throw new Error(err.detail || 'Failed to start video generation');
     }
     return res.json();
+  },
+
+  // Instant Clip & Generate (Direct one-click prompt-to-video)
+  async instantClip(
+    projectId: string,
+    prompt: string,
+    steps: number = 25,
+    frames: number = 49,
+    seed?: number,
+    negativePrompt?: string,
+    loraPath?: string
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/projects/${projectId}/instant-clip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        steps,
+        frames,
+        seed,
+        negative_prompt: negativePrompt,
+        lora_path: loraPath
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to create and generate clip');
+    }
+    return res.json();
   }
 };

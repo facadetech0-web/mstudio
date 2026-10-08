@@ -261,14 +261,54 @@ export function App() {
     frames: number = 49,
     seed?: number,
     negativePrompt?: string,
-    loraPath?: string
+    loraPath?: string,
+    promptFallback?: string
   ) => {
     let targetClipId = clipId || selectedClip?.id || (timelineClips.length > 0 ? timelineClips[0].id : undefined);
 
     if (!targetClipId) {
-      alert('Please plan scenes or write a story prompt first to create timeline scenes.');
-      return;
+      // If there are no clips on timeline yet, auto-create an instant clip from prompt!
+      const activePrompt = promptFallback?.trim() || 'A cinematic masterpiece shot, dramatic lighting, 8k resolution';
+      
+      let projId = currentProject?.id;
+      if (!projId) {
+        try {
+          const newProj = await apiClient.createProject(
+            activePrompt.slice(0, 30).trim() || 'My Movie',
+            activePrompt,
+            'Cinematic'
+          );
+          setCurrentProject(newProj);
+          projId = newProj.id;
+        } catch (e: any) {
+          alert(`Failed to create project: ${e.message}`);
+          return;
+        }
+      }
+
+      try {
+        await apiClient.instantClip(
+          projId,
+          activePrompt,
+          steps,
+          frames,
+          seed,
+          negativePrompt,
+          loraPath
+        );
+        loadJobs();
+        setIsJobQueueOpen(true);
+        await loadScenes(projId);
+        const freshClips = await apiClient.getProjectTimeline(projId);
+        setTimelineClips(freshClips);
+        if (freshClips.length > 0) setSelectedClip(freshClips[freshClips.length - 1]);
+        return;
+      } catch (e: any) {
+        alert(`Video generation error: ${e.message}`);
+        return;
+      }
     }
+
     try {
       await apiClient.generateVideo(targetClipId, steps, frames, seed, negativePrompt, loraPath);
       loadJobs();

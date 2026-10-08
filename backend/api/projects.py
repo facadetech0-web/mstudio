@@ -1,9 +1,10 @@
 import json
 import os
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from backend.database.session import get_db
 from backend.models.db import Project, Scene, Shot, Clip, Character, Location, Job
@@ -15,6 +16,7 @@ from backend.schemas.api import (
 )
 from backend.services.ai.director import AIDirector
 from backend.services.ffmpeg.exporter import ffmpeg_exporter
+from backend.services.queue.worker import generation_worker
 from backend.config import settings
 from backend.logging_config import api_logger
 
@@ -221,9 +223,13 @@ def plan_project_with_ai(project_id: str, req: PlanMovieRequest, db: Session = D
 
     # Break into scenes (1 to 10 scenes supported)
     scenes_plan = ai_director.break_into_scenes(bible, num_scenes=req.num_scenes or 3)
-    # Remove older scenes if regenerating
+    
+    # Remove older clips and scenes if regenerating
+    db.query(Clip).filter(Clip.project_id == p.id).delete()
     db.query(Scene).filter(Scene.project_id == p.id).delete()
-    for s_item in scenes_plan.scenes:
+    db.flush()
+
+    for idx, s_item in enumerate(scenes_plan.scenes, 1):
         s_model = Scene(
             project_id=p.id,
             scene_number=s_item.scene_number,
@@ -236,6 +242,40 @@ def plan_project_with_ai(project_id: str, req: PlanMovieRequest, db: Session = D
             visual_style=s_item.visual_style
         )
         db.add(s_model)
+        db.flush()
+
+        # Build cinematic video prompt
+        vid_prompt = f"Cinematic film shot, {s_item.description}. 35mm film, anamorphic lens, photorealistic, 8k, {s_item.visual_style or bible.visual_style}"
+
+        # Create shot
+        shot_model = Shot(
+            scene_id=s_model.id,
+            shot_number=1,
+            description=s_item.description,
+            image_prompt=s_item.description,
+            video_prompt=vid_prompt,
+            clip_count=1,
+            duration=5.0
+        )
+        db.add(shot_model)
+        db.flush()
+
+        # Create clip directly on timeline
+        clip_model = Clip(
+            shot_id=shot_model.id,
+            scene_id=s_model.id,
+            project_id=p.id,
+            clip_number=1,
+            timeline_order=idx,
+            description=s_item.description,
+            image_prompt=s_item.description,
+            video_prompt=vid_prompt,
+            negative_prompt="blurry, low quality, distorted, deformed, artifacts, watermark",
+            duration=5.0,
+            preview_status="Draft",
+            final_status="Draft"
+        )
+        db.add(clip_model)
 
     db.commit()
     db.refresh(p)
@@ -244,6 +284,89 @@ def plan_project_with_ai(project_id: str, req: PlanMovieRequest, db: Session = D
         "status": "success",
         "movie_bible": bible.model_dump(),
         "scenes_created": len(scenes_plan.scenes)
+    }
+
+class InstantClipRequest(BaseModel):
+    prompt: str
+    steps: int = 25
+    frames: int = 49
+    seed: Optional[int] = None
+    negative_prompt: Optional[str] = "blurry, low quality, distorted, deformed, artifacts, watermark"
+    lora_path: Optional[str] = ""
+
+@router.post("/{project_id}/instant-clip")
+def instant_clip_and_generate(project_id: str, req: InstantClipRequest, db: Session = Depends(get_db)):
+    """
+    Creates an instant scene + shot + clip directly from a user prompt and enqueues CogVideoX-5B generation.
+    """
+    p = db.query(Project).filter(Project.id == project_id).first()
+    if not p:
+        p = Project(name="AI Movie Project", description=req.prompt[:100], genre="Cinematic")
+        db.add(p)
+        db.flush()
+
+    scene_count = db.query(Scene).filter(Scene.project_id == p.id).count()
+    clip_count = db.query(Clip).filter(Clip.project_id == p.id).count()
+
+    s_model = Scene(
+        project_id=p.id,
+        scene_number=scene_count + 1,
+        title=f"Scene {scene_count + 1}",
+        description=req.prompt,
+        visual_style="Cinematic photorealistic 35mm"
+    )
+    db.add(s_model)
+    db.flush()
+
+    shot_model = Shot(
+        scene_id=s_model.id,
+        shot_number=1,
+        description=req.prompt,
+        image_prompt=req.prompt,
+        video_prompt=req.prompt,
+        clip_count=1,
+        duration=5.0
+    )
+    db.add(shot_model)
+    db.flush()
+
+    clip_model = Clip(
+        shot_id=shot_model.id,
+        scene_id=s_model.id,
+        project_id=p.id,
+        clip_number=1,
+        timeline_order=clip_count + 1,
+        description=req.prompt,
+        image_prompt=req.prompt,
+        video_prompt=req.prompt,
+        negative_prompt=req.negative_prompt or "blurry, low quality, distorted, deformed, artifacts, watermark",
+        lora_path=req.lora_path or "",
+        duration=5.0,
+        preview_status="Queued",
+        final_status="Queued"
+    )
+    db.add(clip_model)
+    db.commit()
+    db.refresh(clip_model)
+
+    job = generation_worker.enqueue_job(
+        clip_id=clip_model.id,
+        job_type="final",
+        prompt=req.prompt,
+        negative_prompt=req.negative_prompt or "",
+        steps=req.steps,
+        frames=req.frames,
+        seed=req.seed,
+        model=settings.FINAL_MODEL,
+        resolution="720p",
+        reference_image=""
+    )
+
+    return {
+        "status": "success",
+        "clip_id": clip_model.id,
+        "job_id": job.id,
+        "project_id": p.id
     }
 
 @router.post("/{project_id}/export")
