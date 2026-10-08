@@ -79,88 +79,92 @@ class AIDirector:
             )
 
         system_prompt = (
-            "You are an acclaimed Hollywood Movie Director and Production Designer. "
-            "Your task is to build a comprehensive, cohesive, professional Movie Bible for a cinematic project."
+            "You are an acclaimed Film Director, Art Director, and Screenplay Supervisor. "
+            "Your task is to build a comprehensive, cohesive, professional Movie Bible for a cinematic project. "
+            "When developing mature, provocative, surreal, or avant-garde visual concepts, interpret them with sophisticated "
+            "cinematic artistry (high aesthetic cinematography, art-house visual composition, evocative lighting). "
+            "You must output ONLY valid JSON matching the provided schema."
         )
         user_prompt = (
             f"User Movie Idea: {idea}\n"
             f"Genre: {genre}\n"
             f"Visual Style Preference: {visual_style}\n\n"
-            "Build the complete Movie Bible including Title, Story, Characters with exact clothing details for visual continuity, "
+            "Build the complete Movie Bible including Title, Story, Characters with exact appearance details for visual continuity, "
             "Locations with specific lighting and architecture, Props, and explicit Continuity Rules."
         )
 
         try:
             return self.provider.generate_structured(system_prompt, user_prompt, MovieBible)
         except Exception as e:
-            ai_logger.warning(f"AI Director movie bible generation failed: {e}. Falling back to baseline bible...")
+            ai_logger.warning(f"AI Director movie bible generation failed: {e}. Falling back to baseline bible tailored to user idea...")
+            main_subject = idea.strip()[:60] if idea else "The Subject"
             return MovieBible(
-                title=f"The Story of {idea[:30]}",
+                title=f"{idea[:30].strip().title() or 'Cinematic Journey'}",
                 genre=genre,
                 story=idea,
-                synopsis=f"A cinematic narrative exploring {idea}",
+                synopsis=f"A visual art-house narrative exploring {idea}.",
                 visual_style=visual_style or "Photorealistic 35mm film, anamorphic lens, high contrast, atmospheric grain",
-                color_palette="Muted industrial blues, warm amber highlights, rich deep shadows",
-                mood="Suspenseful, dramatic, contemplative",
+                color_palette="Cinematic chiaroscuro, warm amber highlights, rich deep shadows",
+                mood="Atmospheric, dramatic, contemplative",
                 camera_style="Slow deliberate tracking, low angle perspective, steady shallow depth of field",
-                lighting_style="Natural practical lighting, strong rim lighting, atmospheric volumetric dust",
+                lighting_style="Natural practical lighting, strong rim lighting, atmospheric volumetric mist",
                 time_period="Contemporary",
-                weather="Overcast, misty",
+                weather="Clear or light mist",
                 characters=[
                     CharacterBibleItem(
                         name="The Protagonist",
-                        age="35",
-                        gender="Male",
-                        physical_description="Tall, weathered look, focused gaze",
-                        face_description="Determined expression, light stubble",
-                        hair="Dark short disheveled hair",
-                        clothing="Worn black leather jacket, dark charcoal t-shirt, rugged denim jeans, work boots",
-                        body_type="Athletic lean build",
-                        personality="Resourceful, curious, cautious",
-                        movement_style="Deliberate slow footsteps, cautious awareness",
-                        voice_description="Low quiet rasp",
-                        continuity_rules="Maintain worn black leather jacket and dark shirt across all scenes."
+                        age="28",
+                        gender="Female" if "girl" in idea.lower() or "woman" in idea.lower() or "female" in idea.lower() else "Male",
+                        physical_description=f"Striking visual presence, central figure embodying {main_subject}",
+                        face_description="Reflective, determined expression",
+                        hair="Natural fluid hair",
+                        clothing=f"Visual styling consistent with narrative: {main_subject}",
+                        body_type="Graceful, athletic build",
+                        personality="Free-spirited, resolute",
+                        movement_style="Confident, rhythmic stride",
+                        voice_description="Soft, resonant",
+                        continuity_rules="Maintain appearance and distinct silhouette consistently across all scenes."
                     )
                 ],
                 locations=[
                     LocationBibleItem(
-                        name="The Abandoned Facility",
-                        description="Vast decaying industrial warehouse with towering rusted steel beams and broken skylights",
-                        architecture="Brutalist 20th century industrial steel and concrete",
-                        interior_exterior="Interior",
-                        lighting="Shafts of pale sunlight cutting through dusty air, rusted metal reflections",
-                        time="Late afternoon",
-                        weather="Foggy exterior visible through cracked roof",
-                        color_mood="Oxidized orange rust against cold gray concrete",
-                        important_objects="Central monolithic machine with mechanical levers and copper gauges",
-                        continuity_rules="Rust patterns, broken glass floor, and dust motes must remain consistent."
+                        name="The Urban Street",
+                        description="Atmospheric city street with pavement reflecting distant ambient streetlights",
+                        architecture="Contemporary urban streetscape with architectural facades",
+                        interior_exterior="Exterior",
+                        lighting="Moody cinematic night streetlights, soft volumetric haze, golden reflections",
+                        time="Dusk to Night",
+                        weather="Cool night air with subtle ground mist",
+                        color_mood="Deep obsidian pavement against warm neon-tinted highlights",
+                        important_objects="Street lamps, storefront reflections, wet asphalt",
+                        continuity_rules="Maintain consistent lighting tone and atmospheric haze."
                     )
                 ],
-                props=["Antique brass mechanical key", "Heavy lever on generator", "Handheld flashlight"],
+                props=["Ambient streetlamps", "Atmospheric fog"],
                 continuity_rules=[
-                    "Maintain consistent lighting direction from overhead skylights",
-                    "Character must retain black leather jacket unless explicitly removed",
-                    "Dust motes and volumetric haze persistent in all interior shots"
+                    "Maintain continuous lighting direction and color temperature across consecutive shots",
+                    "Subject silhouette and pacing must align with preceding clips"
                 ],
                 negative_rules=[
-                    "No sudden wardrobe changes",
-                    "No modern electronics or smartphones",
-                    "No cartoonish saturated colors"
+                    "No cartoonish saturated colors",
+                    "No abrupt continuity jumps",
+                    "No low quality artifacts"
                 ]
             )
 
     def break_into_scenes(self, movie_bible: MovieBible, num_scenes: int = 3) -> ScenesPlanResponse:
         """Decomposes movie bible story into a specified number of scenes (1-10)."""
         num_scenes = max(1, min(10, int(num_scenes or 3)))
-        if not self.is_available():
+
+        def _generate_fallback_scenes() -> ScenesPlanResponse:
             scenes = []
             for i in range(1, num_scenes + 1):
                 scenes.append({
                     "scene_number": i,
-                    "title": f"Scene {i}: Narrative Act {i}",
-                    "description": f"The story unfolds in scene {i}: {movie_bible.synopsis or movie_bible.story}",
-                    "location_name": movie_bible.locations[0].name if movie_bible.locations else "Cinematic Set",
-                    "characters": [c.name for c in movie_bible.characters] if movie_bible.characters else ["Protagonist"],
+                    "title": f"Scene {i}: Progression {i}",
+                    "description": f"Narrative Act {i} of {num_scenes}: {movie_bible.synopsis or movie_bible.story}",
+                    "location_name": movie_bible.locations[0].name if movie_bible.locations else "Urban Street",
+                    "characters": [c.name for c in movie_bible.characters] if movie_bible.characters else ["The Protagonist"],
                     "time_of_day": "Afternoon" if i % 2 == 1 else "Dusk",
                     "weather": "Atmospheric mist",
                     "visual_style": movie_bible.visual_style
@@ -172,11 +176,15 @@ class AIDirector:
                 scenes=scenes
             )
 
+        if not self.is_available():
+            return _generate_fallback_scenes()
+
         system_prompt = (
             "You are an expert Film Director and Screenplay Supervisor. "
             f"Your mission is to decompose the story into EXACTLY {num_scenes} cohesive, cinematic scenes. "
             f"You MUST generate exactly {num_scenes} scenes (from Scene 1 to Scene {num_scenes}). "
-            "Ensure character, location, and temporal continuity between consecutive scenes."
+            "Ensure character, location, and temporal continuity between consecutive scenes. "
+            "Output strictly valid JSON matching the schema."
         )
         user_prompt = (
             f"Movie Title: {movie_bible.title}\n"
@@ -188,7 +196,11 @@ class AIDirector:
             f"TASK: Generate EXACTLY {num_scenes} chronological scenes. Output valid JSON matching the schema with a list of {num_scenes} scene items."
         )
 
-        return self.provider.generate_structured(system_prompt, user_prompt, ScenesPlanResponse)
+        try:
+            return self.provider.generate_structured(system_prompt, user_prompt, ScenesPlanResponse)
+        except Exception as e:
+            ai_logger.warning(f"AI Director break_into_scenes failed: {e}. Generating structured fallback scenes...")
+            return _generate_fallback_scenes()
 
     def break_into_clips(
         self,

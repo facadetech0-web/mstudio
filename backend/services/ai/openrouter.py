@@ -43,7 +43,7 @@ class OpenRouterProvider(AIProvider):
             return {
                 "ok": True,
                 "configured": True,
-                "model": os.getenv("OPENROUTER_MODEL", self.model) or "qwen/qwen3.5-flash-02-23",
+                "model": os.getenv("OPENROUTER_MODEL", self.model) or "meta-llama/llama-3.3-70b-instruct",
                 "latency_ms": latency_ms,
                 "reply": content.strip()[:20]
             }
@@ -52,26 +52,47 @@ class OpenRouterProvider(AIProvider):
             return {
                 "ok": False,
                 "configured": True,
-                "model": os.getenv("OPENROUTER_MODEL", self.model) or "qwen/qwen3.5-flash-02-23",
+                "model": os.getenv("OPENROUTER_MODEL", self.model) or "meta-llama/llama-3.3-70b-instruct",
                 "latency_ms": latency_ms,
                 "error": str(e)
             }
 
     def _extract_json_substring(self, text: str) -> str:
-        """Extracts JSON substring from raw response even if surrounded by markdown."""
+        """Extracts clean JSON substring from raw response, stripping thinking monologues and markdown."""
         text = text.strip()
-        # Look for markdown code block
-        match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
 
-        # Find first '{' and last '}'
+        # 1. Strip reasoning and thinking tokens (<think>...</think>, Thought process, etc.)
+        text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
+        text = re.sub(r"<thought>[\s\S]*?</thought>", "", text, flags=re.IGNORECASE).strip()
+
+        # If model emitted closing </think> without opening <think>
+        if "</think>" in text:
+            text = text.split("</think>", 1)[-1].strip()
+
+        # Strip unformatted "Thinking Process: ... \n\n" headers before JSON
+        if "thinking process:" in text.lower():
+            json_pos = min([p for p in [text.find("```"), text.find("{"), text.find("[")] if p != -1], default=-1)
+            if json_pos != -1:
+                text = text[json_pos:].strip()
+
+        # 2. Look for markdown code block ```json ... ``` or unclosed ```json ...
+        match = re.search(r"```(?:json)?\s*([\s\S]*?)(?:```|$)", text, re.IGNORECASE)
+        if match and match.group(1).strip():
+            candidate = match.group(1).strip()
+            c_start = candidate.find("{")
+            c_arr = candidate.find("[")
+            if c_start != -1 or c_arr != -1:
+                first_idx = min([i for i in [c_start, c_arr] if i != -1])
+                candidate = candidate[first_idx:]
+            return candidate
+
+        # 3. Find first '{' and last '}'
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
             return text[start:end+1]
 
-        # Or array '[' and ']'
+        # 4. Or array '[' and ']'
         start_arr = text.find("[")
         end_arr = text.rfind("]")
         if start_arr != -1 and end_arr != -1 and end_arr > start_arr:
@@ -86,7 +107,7 @@ class OpenRouterProvider(AIProvider):
             )
 
         api_key = os.getenv("OPENROUTER_API_KEY", self.api_key)
-        model = os.getenv("OPENROUTER_MODEL", self.model) or "qwen/qwen3.5-flash-02-23"
+        model = os.getenv("OPENROUTER_MODEL", self.model) or "meta-llama/llama-3.3-70b-instruct"
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -95,16 +116,14 @@ class OpenRouterProvider(AIProvider):
             "Content-Type": "application/json"
         }
 
-        # Fallback candidate models if primary model is unavailable or 404s
+        # Candidate models prioritized for fast, reliable, direct JSON output
         candidate_models = [model]
         for fallback in [
+            "meta-llama/llama-3.3-70b-instruct",
+            "mistralai/mistral-small-24b-instruct-2501",
+            "qwen/qwen-2.5-72b-instruct",
             "qwen/qwen3.5-flash-02-23",
-            "qwen/qwen3.5-plus-02-15",
-            "qwen/qwen3.5-27b",
-            "qwen/qwen3-32b",
-            "qwen/qwen3-8b",
-            "google/gemini-2.0-flash-001",
-            "meta-llama/llama-3.3-70b-instruct"
+            "deepseek/deepseek-chat"
         ]:
             if fallback not in candidate_models:
                 candidate_models.append(fallback)
