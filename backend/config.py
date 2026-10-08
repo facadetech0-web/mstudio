@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     PROJECTS_DIR: str = os.getenv("PROJECTS_DIR", "./projects")
     LOGS_DIR: str = os.getenv("LOGS_DIR", "./logs")
 
-    PREVIEW_MODEL: str = os.getenv("PREVIEW_MODEL", "cogvideox-2b")
+    PREVIEW_MODEL: str = os.getenv("PREVIEW_MODEL", "cogvideox-5b-i2v")
     FINAL_MODEL: str = os.getenv("FINAL_MODEL", "cogvideox-5b-i2v")
 
     DEVICE: str = os.getenv("DEVICE", "cuda")

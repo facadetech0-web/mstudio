@@ -7,7 +7,10 @@ interface AIDirectorModalProps {
   onClose: () => void;
   project: Project | null;
   currentScene: Scene | null;
-  onPlanMovie: (idea: string, genre: string) => Promise<void>;
+  aiStatus: { ok: boolean; configured: boolean; model?: string; latency_ms?: number; error?: string } | null;
+  onCheckAIStatus: () => void;
+  isCheckingAI: boolean;
+  onPlanMovie: (idea: string, genre: string, numScenes: number) => Promise<void>;
   onCheckContinuity: (sceneId: string) => Promise<any>;
 }
 
@@ -16,6 +19,9 @@ export const AIDirectorModal: React.FC<AIDirectorModalProps> = ({
   onClose,
   project,
   currentScene,
+  aiStatus,
+  onCheckAIStatus,
+  isCheckingAI,
   onPlanMovie,
   onCheckContinuity
 }) => {
@@ -25,6 +31,7 @@ export const AIDirectorModal: React.FC<AIDirectorModalProps> = ({
     'A man enters an abandoned factory, walks through it, discovers an old machine and turns it on.'
   );
   const [genre, setGenre] = useState(project?.genre || 'Sci-Fi Mystery');
+  const [numScenes, setNumScenes] = useState<number>(3);
   const [isPlanning, setIsPlanning] = useState(false);
   const [continuityReport, setContinuityReport] = useState<any>(null);
   const [isCheckingContinuity, setIsCheckingContinuity] = useState(false);
@@ -37,7 +44,7 @@ export const AIDirectorModal: React.FC<AIDirectorModalProps> = ({
     if (!movieIdea.trim()) return;
     setIsPlanning(true);
     try {
-      await onPlanMovie(movieIdea, genre);
+      await onPlanMovie(movieIdea, genre, numScenes);
       setActiveTab('bible');
     } finally {
       setIsPlanning(false);
@@ -145,8 +152,38 @@ export const AIDirectorModal: React.FC<AIDirectorModalProps> = ({
                   className="w-full bg-studio-900 border border-studio-700 text-xs text-white rounded p-3 focus:outline-none focus:border-studio-gold leading-relaxed"
                 />
 
-                <div className="mt-3 flex items-center space-x-3">
-                  <div className="w-1/2">
+                {/* AI Prompt Connection Signal Box */}
+                <div className={`mt-3 p-3 rounded border flex items-center justify-between text-xs ${
+                  aiStatus?.ok
+                    ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+                    : 'bg-rose-950/20 border-rose-500/30 text-rose-200'
+                }`}>
+                  <div className="flex items-center space-x-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${aiStatus?.ok ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+                    <div>
+                      <span className="font-semibold">
+                        {aiStatus?.ok ? `OpenRouter AI Connected (${aiStatus.model || 'Qwen 3.5'})` : 'OpenRouter AI Disconnected'}
+                      </span>
+                      <p className="text-[11px] opacity-75">
+                        {aiStatus?.ok
+                          ? `Response Latency: ${aiStatus.latency_ms || 180}ms • Ready to write screenplay`
+                          : (aiStatus?.error || 'No active response from OpenRouter API')}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onCheckAIStatus}
+                    disabled={isCheckingAI}
+                    className="px-2.5 py-1 rounded bg-studio-800 hover:bg-studio-700 text-[11px] text-white border border-studio-600 transition flex items-center space-x-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isCheckingAI ? 'animate-spin' : ''}`} />
+                    <span>{isCheckingAI ? 'Testing...' : 'Check Signal'}</span>
+                  </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div>
                     <label className="text-studio-400 block mb-1">Genre</label>
                     <input
                       type="text"
@@ -154,6 +191,30 @@ export const AIDirectorModal: React.FC<AIDirectorModalProps> = ({
                       onChange={(e) => setGenre(e.target.value)}
                       className="w-full bg-studio-900 border border-studio-700 text-xs text-white rounded p-2"
                     />
+                  </div>
+
+                  {/* Scene Count Selector (1 - 10) */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-studio-300 font-medium">Scenes to Write</label>
+                      <span className="text-studio-gold font-bold font-mono text-xs">{numScenes} Scenes</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setNumScenes(n)}
+                          className={`flex-1 py-1 rounded text-[11px] font-bold transition ${
+                            numScenes === n
+                              ? 'bg-studio-gold text-studio-950 shadow-sm'
+                              : 'bg-studio-800 hover:bg-studio-700 text-studio-300'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -164,7 +225,7 @@ export const AIDirectorModal: React.FC<AIDirectorModalProps> = ({
                     className="w-full py-2.5 bg-gradient-to-r from-amber-600 to-studio-gold hover:from-amber-500 hover:to-amber-400 disabled:opacity-50 text-studio-950 font-bold uppercase tracking-wider rounded shadow transition flex items-center justify-center space-x-2"
                   >
                     <Sparkles className="w-4 h-4 fill-studio-950" />
-                    <span>{isPlanning ? 'AI Director Constructing Movie...' : 'Generate Full Movie Plan'}</span>
+                    <span>{isPlanning ? `AI Writing ${numScenes} Scenes...` : `Write Story & Generate ${numScenes} Scenes`}</span>
                   </button>
                 </div>
               </div>

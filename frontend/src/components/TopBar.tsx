@@ -6,6 +6,9 @@ interface TopBarProps {
   currentProject: Project | null;
   diagnostics: SystemDiagnostics | null;
   activeJobsCount: number;
+  aiStatus: { ok: boolean; configured: boolean; model?: string; latency_ms?: number; error?: string } | null;
+  onCheckAIStatus: () => void;
+  isCheckingAI: boolean;
   onOpenAIDirector: () => void;
   onOpenDiagnostics: () => void;
   onOpenBenchmark: () => void;
@@ -18,6 +21,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   currentProject,
   diagnostics,
   activeJobsCount,
+  aiStatus,
+  onCheckAIStatus,
+  isCheckingAI,
   onOpenAIDirector,
   onOpenDiagnostics,
   onOpenBenchmark,
@@ -66,6 +72,23 @@ export const TopBar: React.FC<TopBarProps> = ({
               {diagnostics.gpu_total_vram_gb} GB
             </span>
           )}
+        </button>
+
+        {/* OpenRouter AI Connection Signal Indicator */}
+        <button
+          onClick={onCheckAIStatus}
+          disabled={isCheckingAI}
+          className={`flex items-center space-x-1.5 px-2.5 py-1 text-xs rounded border transition ${
+            aiStatus?.ok
+              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/50'
+              : 'bg-rose-950/40 border-rose-500/40 text-rose-300 hover:bg-rose-900/50'
+          }`}
+          title={aiStatus?.ok ? `OpenRouter Active (${aiStatus.model}) - Latency: ${aiStatus.latency_ms}ms. Click to recheck signal.` : `OpenRouter Offline: ${aiStatus?.error || 'No response'}. Click to test signal.`}
+        >
+          <span className={`w-2 h-2 rounded-full ${aiStatus?.ok ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+          <span className="font-semibold text-[11px]">
+            {isCheckingAI ? 'Testing AI...' : (aiStatus?.ok ? `AI Online (${aiStatus.latency_ms || 120}ms)` : 'AI Offline')}
+          </span>
         </button>
 
         {/* Real Benchmark Mode */}

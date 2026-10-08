@@ -23,6 +23,8 @@ export function App() {
   const [selectedClip, setSelectedClip] = useState<Clip | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [diagnostics, setDiagnostics] = useState<SystemDiagnostics | null>(null);
+  const [aiStatus, setAiStatus] = useState<{ ok: boolean; configured: boolean; model?: string; latency_ms?: number; error?: string } | null>(null);
+  const [isCheckingAI, setIsCheckingAI] = useState<boolean>(false);
 
   // Use refs to avoid stale closure in SSE callbacks
   const currentProjectRef = useRef<Project | null>(null);
@@ -43,9 +45,22 @@ export function App() {
   const [isJobQueueOpen, setIsJobQueueOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  // 1. Initial Load: Diagnostics & Projects
+  const checkAIStatus = async () => {
+    setIsCheckingAI(true);
+    try {
+      const res = await apiClient.getAIStatus();
+      setAiStatus(res);
+    } catch (e: any) {
+      setAiStatus({ ok: false, configured: false, error: e.message });
+    } finally {
+      setIsCheckingAI(false);
+    }
+  };
+
+  // 1. Initial Load: Diagnostics, Projects & AI Status Signal
   useEffect(() => {
     loadDiagnostics();
+    checkAIStatus();
     loadProjects();
     loadJobs();
 
@@ -196,53 +211,33 @@ export function App() {
     }
   };
 
-  const handlePlanMovie = async (idea: string, genre: string) => {
-    if (!currentProject) return;
+  const handlePlanMovie = async (idea: string, genre: string, numScenes: number = 3) => {
+    if (!currentProject) {
+      try {
+        const newP = await apiClient.createProject(`Movie ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, idea, genre);
+        setCurrentProject(newP);
+        await apiClient.planProject(newP.id, idea, genre, numScenes);
+        const updatedP = await apiClient.getProject(newP.id);
+        setCurrentProject(updatedP);
+        await loadScenes(newP.id);
+        const freshClips = await apiClient.getProjectTimeline(newP.id);
+        setTimelineClips(freshClips);
+        if (freshClips.length > 0) setSelectedClip(freshClips[0]);
+      } catch (e: any) {
+        alert(`AI Director Planning error: ${e.message}`);
+      }
+      return;
+    }
     try {
-      await apiClient.planProject(currentProject.id, idea, genre);
+      await apiClient.planProject(currentProject.id, idea, genre, numScenes);
       const updatedP = await apiClient.getProject(currentProject.id);
       setCurrentProject(updatedP);
       await loadScenes(currentProject.id);
-      await loadTimeline(currentProject.id);
+      const freshClips = await apiClient.getProjectTimeline(currentProject.id);
+      setTimelineClips(freshClips);
+      if (freshClips.length > 0) setSelectedClip(freshClips[0]);
     } catch (e: any) {
       alert(`AI Director Planning error: ${e.message}`);
-    }
-  };
-
-  // CORE FEATURE: Number of Clips decomposition handler (Requirements #14, #16, #17)
-  const handleBreakIntoClips = async (prompt: string, count: number, duration: number) => {
-    let activeShotId = currentShot?.id;
-    if (!activeShotId && currentScene) {
-      const shts = await apiClient.getShots(currentScene.id);
-      if (shts.length > 0) {
-        setCurrentShot(shts[0]);
-        activeShotId = shts[0].id;
-      } else {
-        await apiClient.breakSceneIntoShots(currentScene.id);
-        const refreshedShts = await apiClient.getShots(currentScene.id);
-        if (refreshedShts.length > 0) {
-          setCurrentShot(refreshedShts[0]);
-          activeShotId = refreshedShts[0].id;
-        }
-      }
-    }
-
-    if (!activeShotId) {
-      alert('Please select a scene from the left sidebar first.');
-      return;
-    }
-
-    try {
-      await apiClient.breakShotIntoClips(activeShotId, prompt, count, duration);
-      if (currentProject) {
-        const clips = await apiClient.getProjectTimeline(currentProject.id);
-        setTimelineClips(clips);
-        if (clips.length > 0) {
-          setSelectedClip(clips[0]);
-        }
-      }
-    } catch (e: any) {
-      alert(`AI Decomposition error: ${e.message}`);
     }
   };
 
@@ -259,9 +254,10 @@ export function App() {
     }
   };
 
-  const handleGeneratePreview = async (
+  // UNIFIED COGVIDEOX-5B VIDEO GENERATOR (Simple Movie Studio)
+  const handleGenerateVideo = async (
     clipId?: string,
-    steps: number = 15,
+    steps: number = 25,
     frames: number = 49,
     seed?: number,
     negativePrompt?: string,
@@ -269,61 +265,17 @@ export function App() {
   ) => {
     let targetClipId = clipId || selectedClip?.id || (timelineClips.length > 0 ? timelineClips[0].id : undefined);
 
-    // Auto-create clip if timeline is currently empty so user is never blocked
     if (!targetClipId) {
-      let activeShotId = currentShot?.id;
-      if (!activeShotId && currentScene) {
-        const shts = await apiClient.getShots(currentScene.id);
-        if (shts.length > 0) {
-          activeShotId = shts[0].id;
-          setCurrentShot(shts[0]);
-        }
-      }
-      if (activeShotId && currentProject) {
-        await apiClient.breakShotIntoClips(activeShotId, currentShot?.description || "Cinematic movie scene", 1, 5.0);
-        const freshClips = await apiClient.getProjectTimeline(currentProject.id);
-        setTimelineClips(freshClips);
-        if (freshClips.length > 0) {
-          targetClipId = freshClips[0].id;
-          setSelectedClip(freshClips[0]);
-        }
-      }
-    }
-
-    if (!targetClipId) {
-      alert('Please click "AI Decompose into Sequential Clips" first to generate clips in the timeline.');
+      alert('Please plan scenes or write a story prompt first to create timeline scenes.');
       return;
     }
     try {
-      await apiClient.generatePreview(targetClipId, steps, frames, seed, negativePrompt, loraPath);
+      await apiClient.generateVideo(targetClipId, steps, frames, seed, negativePrompt, loraPath);
       loadJobs();
       setIsJobQueueOpen(true);
       if (currentProject) loadTimeline(currentProject.id);
     } catch (e: any) {
-      alert(`Generation request error: ${e.message}`);
-    }
-  };
-
-  const handleGenerateFinal = async (
-    clipId?: string,
-    steps: number = 30,
-    frames: number = 49,
-    seed?: number,
-    negativePrompt?: string,
-    loraPath?: string
-  ) => {
-    const targetClipId = clipId || selectedClip?.id || (timelineClips.length > 0 ? timelineClips[0].id : undefined);
-    if (!targetClipId) {
-      alert('Please generate or select a clip first.');
-      return;
-    }
-    try {
-      await apiClient.generateFinal(targetClipId, steps, frames, seed, negativePrompt, loraPath);
-      loadJobs();
-      setIsJobQueueOpen(true);
-      if (currentProject) loadTimeline(currentProject.id);
-    } catch (e: any) {
-      alert(`Final generation request error: ${e.message}`);
+      alert(`Video generation error: ${e.message}`);
     }
   };
 
@@ -414,6 +366,9 @@ export function App() {
         currentProject={currentProject}
         diagnostics={diagnostics}
         activeJobsCount={activeJobsCount}
+        aiStatus={aiStatus}
+        onCheckAIStatus={checkAIStatus}
+        isCheckingAI={isCheckingAI}
         onOpenAIDirector={() => setIsAIDirectorOpen(true)}
         onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
         onOpenBenchmark={() => setIsBenchmarkOpen(true)}
@@ -447,14 +402,17 @@ export function App() {
           onUploadReference={handleUploadReference}
         />
 
-        {/* Right AI & Generation Panel */}
+        {/* Right AI Prompt & CogVideoX-5B Generation Panel */}
         <GenerationPanel
           currentScene={currentScene}
           currentShot={currentShot}
           selectedClip={selectedClip}
-          onBreakIntoClips={handleBreakIntoClips}
-          onGeneratePreview={handleGeneratePreview}
-          onGenerateFinal={handleGenerateFinal}
+          timelineClips={timelineClips}
+          aiStatus={aiStatus}
+          onCheckAIStatus={checkAIStatus}
+          isCheckingAI={isCheckingAI}
+          onPlanMovieStory={(prompt, numScenes) => handlePlanMovie(prompt, currentProject?.genre || 'Cinematic', numScenes)}
+          onGenerateVideo={handleGenerateVideo}
           onEnhancePrompt={handleEnhancePrompt}
           isGenerating={activeJobsCount > 0}
         />
@@ -478,6 +436,9 @@ export function App() {
         onClose={() => setIsAIDirectorOpen(false)}
         project={currentProject}
         currentScene={currentScene}
+        aiStatus={aiStatus}
+        onCheckAIStatus={checkAIStatus}
+        isCheckingAI={isCheckingAI}
         onPlanMovie={handlePlanMovie}
         onCheckContinuity={(sId) => apiClient.checkContinuity(sId)}
       />

@@ -31,14 +31,17 @@ class ModelManager:
         2. Local MODEL_DIR (e.g. models/cogvideox-2b)
         3. Hugging Face repo ID with persistent disk cache
         """
-        # 1. Scan /kaggle/input for attached Kaggle Datasets
+        # 1. Scan /kaggle/input for attached Kaggle Datasets (0s download, 0 MB disk used)
         kaggle_input = Path("/kaggle/input")
         if kaggle_input.exists():
             for p in kaggle_input.rglob("*"):
-                if p.is_dir() and target_name.lower().replace("-", "") in p.name.lower().replace("-", ""):
-                    if (p / "model_index.json").exists() or (p / "transformer").exists() or (p / "vae").exists():
-                        generation_logger.info(f"⚡ Found pre-cached {target_name} in Kaggle Dataset: {p}")
-                        return str(p)
+                if p.is_dir():
+                    p_name_lower = p.name.lower().replace("-", "").replace("_", "")
+                    clean_target = target_name.lower().replace("-", "").replace("_", "")
+                    if clean_target in p_name_lower or ("5b" in clean_target and "5b" in p_name_lower and "cog" in p_name_lower):
+                        if (p / "model_index.json").exists() or (p / "transformer").exists() or (p / "vae").exists():
+                            generation_logger.info(f"⚡ Found pre-cached {target_name} in Kaggle Dataset: {p}")
+                            return str(p)
 
         # 2. Check local MODEL_DIR
         local_dir = Path(settings.MODEL_DIR) / target_name
@@ -50,29 +53,27 @@ class ModelManager:
         return fallback_hf_id
 
     def _register_default_models(self):
-        cog2b_path = self._find_model_path("cogvideox-2b", "THUDM/CogVideoX-2b")
         cog5b_path = self._find_model_path("cogvideox-5b-i2v", "THUDM/CogVideoX-5b-I2V")
+        cog2b_path = self._find_model_path("cogvideox-2b", "THUDM/CogVideoX-2b")
 
-        self.models["cogvideox-2b"] = CogVideoX2BModel(
-            model_path_or_id=cog2b_path,
+        self.models["cogvideox-5b-i2v"] = CogVideoX5BI2VModel(
+            model_path_or_id=cog5b_path,
             device=settings.DEVICE,
             dtype=settings.DTYPE
         )
-        self.models["cogvideox-5b-i2v"] = CogVideoX5BI2VModel(
-            model_path_or_id=cog5b_path,
+        self.models["cogvideox-2b"] = CogVideoX2BModel(
+            model_path_or_id=cog2b_path,
             device=settings.DEVICE,
             dtype=settings.DTYPE
         )
 
     def _normalize_name(self, name: str) -> str:
         if not name:
-            return "cogvideox-2b"
-        key = name.lower().strip()
-        if "5b" in key:
             return "cogvideox-5b-i2v"
+        key = name.lower().strip()
         if "2b" in key:
             return "cogvideox-2b"
-        return key
+        return "cogvideox-5b-i2v"
 
     def register_model(self, name: str, model_instance: VideoModel):
         """Allows registering future models like Wan 2.1 or LTX Video."""

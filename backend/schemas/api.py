@@ -233,6 +233,7 @@ class PlanMovieRequest(BaseModel):
     idea: str
     genre: Optional[str] = "Cinematic"
     visual_style: Optional[str] = "Photorealistic film, 35mm lens"
+    num_scenes: Optional[int] = Field(default=3, ge=1, le=10)
 
 class BreakIntoClipsRequest(BaseModel):
     prompt: str

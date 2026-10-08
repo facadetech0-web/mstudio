@@ -26,11 +26,11 @@ export const apiClient = {
     return res.json();
   },
 
-  async planProject(id: string, idea: string, genre: string = 'Cinematic'): Promise<any> {
+  async planProject(id: string, idea: string, genre: string = 'Cinematic', numScenes: number = 3): Promise<any> {
     const res = await fetch(`${API_BASE}/projects/${id}/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idea, genre })
+      body: JSON.stringify({ idea, genre, num_scenes: numScenes })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -266,6 +266,41 @@ export const apiClient = {
   async getBenchmarks(): Promise<BenchmarkRecord[]> {
     const res = await fetch(`${API_BASE}/system/benchmarks`);
     if (!res.ok) throw new Error('Failed to fetch benchmarks');
+    return res.json();
+  },
+
+  // AI Connection Status Signal
+  async getAIStatus(): Promise<{ ok: boolean; configured: boolean; model?: string; latency_ms?: number; error?: string; reply?: string }> {
+    const res = await fetch(`${API_BASE}/ai/status`);
+    if (!res.ok) throw new Error('Failed to check AI status');
+    return res.json();
+  },
+
+  // Unified CogVideoX-5B Video Generator
+  async generateVideo(
+    clipId: string,
+    steps: number = 25,
+    frames: number = 49,
+    seed?: number,
+    negativePrompt?: string,
+    loraPath?: string
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/clips/${clipId}/final`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'cogvideox-5b-i2v',
+        steps,
+        frames,
+        seed,
+        negative_prompt: negativePrompt,
+        lora_path: loraPath
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to start video generation');
+    }
     return res.json();
   }
 };

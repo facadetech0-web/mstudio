@@ -10,10 +10,15 @@ from backend.services.ai.director import AIDirector
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 ai_director = AIDirector()
 
+@router.get("/status")
+def check_ai_status():
+    """Checks whether OpenRouter AI prompt connection is operational."""
+    return ai_director.provider.test_connection()
+
 @router.post("/plan-movie")
 def plan_movie(req: PlanMovieRequest):
     bible = ai_director.generate_movie_bible(req.idea, req.genre or "Cinematic", req.visual_style or "")
-    scenes = ai_director.break_into_scenes(bible)
+    scenes = ai_director.break_into_scenes(bible, num_scenes=req.num_scenes or 3)
     return {
         "movie_bible": bible.model_dump(),
         "scenes": scenes.model_dump()

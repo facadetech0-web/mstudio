@@ -1,21 +1,17 @@
 import React, { useState } from 'react';
-import { Sparkles, Play, Video, Settings, ChevronDown, ChevronUp, Wand2, ShieldCheck } from 'lucide-react';
+import { Sparkles, Video, Settings, ChevronDown, ChevronUp, RefreshCw, Wand2, Layers, Film } from 'lucide-react';
 import { Scene, Shot, Clip } from '../types';
 
 interface GenerationPanelProps {
   currentScene: Scene | null;
   currentShot: Shot | null;
   selectedClip: Clip | null;
-  onBreakIntoClips: (prompt: string, count: number, duration: number) => void;
-  onGeneratePreview: (
-    clipId?: string,
-    steps?: number,
-    frames?: number,
-    seed?: number,
-    negativePrompt?: string,
-    loraPath?: string
-  ) => void;
-  onGenerateFinal: (
+  timelineClips: Clip[];
+  aiStatus: { ok: boolean; configured: boolean; model?: string; latency_ms?: number; error?: string } | null;
+  onCheckAIStatus: () => void;
+  isCheckingAI: boolean;
+  onPlanMovieStory: (prompt: string, numScenes: number) => Promise<void>;
+  onGenerateVideo: (
     clipId?: string,
     steps?: number,
     frames?: number,
@@ -31,184 +27,217 @@ export const GenerationPanel: React.FC<GenerationPanelProps> = ({
   currentScene,
   currentShot,
   selectedClip,
-  onBreakIntoClips,
-  onGeneratePreview,
-  onGenerateFinal,
+  timelineClips,
+  aiStatus,
+  onCheckAIStatus,
+  isCheckingAI,
+  onPlanMovieStory,
+  onGenerateVideo,
   onEnhancePrompt,
   isGenerating
 }) => {
-  const [prompt, setPrompt] = useState(
+  // Story premise & AI Director Prompt state
+  const [storyPrompt, setStoryPrompt] = useState(
     currentShot?.description ||
-    'A man enters an abandoned factory, walks through it, discovers an old machine and turns it on.'
+    selectedClip?.description ||
+    'A lone explorer navigates through a misty ancient ruin, discovering an illuminated celestial artifact.'
   );
-  // CORE FEATURE: Number of Clips Slider (Requirement #14)
-  const [clipCount, setClipCount] = useState<number>(1);
-  const [clipDuration, setClipDuration] = useState<number>(5.0);
+  const [numScenes, setNumScenes] = useState<number>(3);
+  const [isWritingStory, setIsWritingStory] = useState<boolean>(false);
 
-  // Advanced settings state (Requirement #53)
+  // Active scene video prompt state
+  const [activeClipPrompt, setActiveClipPrompt] = useState<string>(
+    selectedClip?.video_prompt || selectedClip?.description || storyPrompt
+  );
+
+  // Sync active clip prompt when selection changes
+  React.useEffect(() => {
+    if (selectedClip) {
+      setActiveClipPrompt(selectedClip.video_prompt || selectedClip.description || '');
+    }
+  }, [selectedClip?.id]);
+
+  // Advanced generation parameters for CogVideoX-5B
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
-  const [steps, setSteps] = useState<number>(15);
+  const [steps, setSteps] = useState<number>(25);
   const [frames, setFrames] = useState<number>(49);
   const [seed, setSeed] = useState<string>('');
   const [negativePrompt, setNegativePrompt] = useState<string>(
     'blurry, low quality, distorted, deformed, artifacts, watermark'
   );
   const [loraPath, setLoraPath] = useState<string>('');
-  const [lowVramMode, setLowVramMode] = useState<boolean>(true);
   const [isEnhancing, setIsEnhancing] = useState<boolean>(false);
 
-  const estimatedTotalDuration = clipCount * clipDuration;
-
   const handleEnhance = async () => {
-    if (!prompt.trim()) return;
+    if (!activeClipPrompt.trim()) return;
     setIsEnhancing(true);
     try {
-      const res = await onEnhancePrompt(prompt);
+      const res = await onEnhancePrompt(activeClipPrompt);
       if (res && res.video) {
-        setPrompt(res.video);
+        setActiveClipPrompt(res.video);
       }
     } finally {
       setIsEnhancing(false);
     }
   };
 
-  const handleBreakOrPlan = () => {
-    if (prompt.trim()) {
-      onBreakIntoClips(prompt.trim(), clipCount, clipDuration);
+  const handleWriteStory = async () => {
+    if (!storyPrompt.trim()) return;
+    setIsWritingStory(true);
+    try {
+      await onPlanMovieStory(storyPrompt.trim(), numScenes);
+    } finally {
+      setIsWritingStory(false);
     }
   };
 
+  const handleGenerateCurrent = () => {
+    onGenerateVideo(
+      selectedClip?.id,
+      steps,
+      frames,
+      seed ? parseInt(seed, 10) : undefined,
+      negativePrompt.trim() || undefined,
+      loraPath.trim() || undefined
+    );
+  };
+
   return (
-    <div className="w-80 bg-studio-900 border-l border-studio-800 flex flex-col h-[calc(100vh-3.5rem)] select-none">
+    <div className="w-84 bg-studio-900 border-l border-studio-800 flex flex-col h-[calc(100vh-3.5rem)] select-none">
       {/* Panel Header */}
       <div className="p-3 border-b border-studio-800 flex items-center justify-between">
         <span className="text-xs uppercase tracking-wider text-studio-400 font-semibold flex items-center space-x-1.5">
           <Wand2 className="w-3.5 h-3.5 text-studio-gold" />
-          <span>AI & Generation</span>
+          <span>Prompt & Story Director</span>
         </span>
-        <span className="text-[10px] text-studio-500 font-mono">T4 16GB Profile</span>
+        <span className="text-[10px] text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30 font-semibold font-mono">
+          CogVideoX-5B
+        </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Main User Prompt Input */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-medium text-studio-300">Movie / Scene Prompt</label>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs text-studio-200">
+        {/* OpenRouter AI Connection Status Signal Box */}
+        <div className={`p-2.5 rounded-lg border flex items-center justify-between transition ${
+          aiStatus?.ok
+            ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+            : 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+        }`}>
+          <div className="flex items-center space-x-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${aiStatus?.ok ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+            <div>
+              <span className="font-semibold block text-[11px]">
+                {aiStatus?.ok ? `OpenRouter AI Active (${aiStatus.model || 'Qwen 3.5'})` : 'OpenRouter AI Disconnected'}
+              </span>
+              <span className="text-[10px] opacity-75">
+                {aiStatus?.ok ? `Latency: ${aiStatus.latency_ms || 120}ms • Ready` : (aiStatus?.error || 'Check API Key')}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCheckAIStatus}
+            disabled={isCheckingAI}
+            className="px-2 py-1 bg-studio-800 hover:bg-studio-700 text-[10px] font-semibold text-white rounded border border-studio-700 flex items-center space-x-1 transition"
+            title="Check OpenRouter AI prompt connection"
+          >
+            <RefreshCw className={`w-3 h-3 ${isCheckingAI ? 'animate-spin' : ''}`} />
+            <span>{isCheckingAI ? '...' : 'Signal'}</span>
+          </button>
+        </div>
+
+        {/* SECTION 1: Story Premise & Multi-Scene AI Writer */}
+        <div className="bg-studio-850 p-3 rounded-lg border border-studio-750 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-white flex items-center space-x-1.5">
+              <Film className="w-3.5 h-3.5 text-studio-gold" />
+              <span>Story Premise</span>
+            </label>
+            <span className="text-[10px] text-studio-400 font-mono">Qwen 3.5 AI</span>
+          </div>
+
+          <textarea
+            rows={3}
+            value={storyPrompt}
+            onChange={(e) => setStoryPrompt(e.target.value)}
+            placeholder="Type your movie premise or story idea..."
+            className="w-full bg-studio-900 border border-studio-700 text-xs text-white rounded p-2.5 focus:outline-none focus:border-studio-gold resize-none leading-relaxed"
+          />
+
+          {/* Option to choose how many scenes (1-10) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-studio-300 font-medium text-[11px]">Number of Scenes to Write</span>
+              <span className="text-studio-gold font-bold font-mono text-xs px-2 py-0.5 bg-studio-900 rounded border border-studio-700">
+                {numScenes} {numScenes === 1 ? 'Scene' : 'Scenes'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-5 gap-1 pt-1">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setNumScenes(n)}
+                  className={`py-1 rounded text-[11px] font-bold transition ${
+                    numScenes === n
+                      ? 'bg-studio-gold text-studio-950 shadow-sm'
+                      : 'bg-studio-800 hover:bg-studio-750 text-studio-300'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Write Story Button */}
+          <button
+            onClick={handleWriteStory}
+            disabled={isWritingStory || !storyPrompt.trim()}
+            className="w-full py-2 bg-gradient-to-r from-amber-600 to-studio-gold hover:from-amber-500 hover:to-amber-400 disabled:opacity-50 text-studio-950 font-bold text-xs uppercase tracking-wider rounded shadow flex items-center justify-center space-x-1.5 transition"
+          >
+            <Sparkles className="w-3.5 h-3.5 fill-studio-950" />
+            <span>{isWritingStory ? `AI Writing ${numScenes} Scenes...` : `Write Story (${numScenes} Scenes)`}</span>
+          </button>
+        </div>
+
+        {/* SECTION 2: Active Scene Video Prompt & CogVideoX-5B Render */}
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white flex items-center space-x-1.5">
+              <Layers className="w-3.5 h-3.5 text-studio-gold" />
+              <span>Active Scene Prompt</span>
+            </span>
             <button
               onClick={handleEnhance}
-              disabled={isEnhancing || !prompt.trim()}
+              disabled={isEnhancing || !activeClipPrompt.trim()}
               className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center space-x-1 disabled:opacity-50"
             >
               <Sparkles className="w-3 h-3" />
-              <span>{isEnhancing ? 'Enhancing...' : 'Enhance Prompt'}</span>
+              <span>{isEnhancing ? 'Enhancing...' : 'Enhance'}</span>
             </button>
           </div>
+
           <textarea
-            rows={4}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe your scene action or story progression..."
+            rows={3}
+            value={activeClipPrompt}
+            onChange={(e) => setActiveClipPrompt(e.target.value)}
+            placeholder="Scene video prompt for CogVideoX-5B..."
             className="w-full bg-studio-850 border border-studio-700 text-xs text-white rounded p-2.5 focus:outline-none focus:border-studio-gold resize-none leading-relaxed"
           />
-        </div>
 
-        {/* CORE FEATURE: Number of Clips Slider (Requirements #14, #15, #16) */}
-        <div className="bg-studio-850 p-3 rounded-lg border border-studio-750">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-white">Number of Clips</span>
-            <span className="text-xs font-bold text-studio-gold font-mono px-2 py-0.5 bg-studio-900 rounded border border-studio-700">
-              {clipCount} {clipCount === 1 ? 'Clip' : 'Clips'}
-            </span>
-          </div>
-
-          <input
-            type="range"
-            min={1}
-            max={10}
-            step={1}
-            value={clipCount}
-            onChange={(e) => setClipCount(parseInt(e.target.value, 10))}
-            className="w-full h-1.5 bg-studio-700 rounded-lg cursor-pointer"
-          />
-
-          <div className="flex justify-between text-[10px] text-studio-500 mt-1 font-mono">
-            <span>1</span>
-            <span>5</span>
-            <span>10</span>
-          </div>
-
-          {/* Clip Duration Selector */}
-          <div className="mt-3 flex items-center justify-between text-xs">
-            <span className="text-studio-400">Clip Duration:</span>
-            <select
-              value={clipDuration}
-              onChange={(e) => setClipDuration(parseFloat(e.target.value))}
-              className="bg-studio-900 border border-studio-700 text-white rounded px-2 py-1 text-xs focus:outline-none"
-            >
-              <option value={3.0}>3 seconds</option>
-              <option value={5.0}>5 seconds</option>
-              <option value={8.0}>8 seconds</option>
-            </select>
-          </div>
-
-          {/* Estimated Total Duration calculation */}
-          <div className="mt-2.5 pt-2 border-t border-studio-700/60 flex items-center justify-between text-xs">
-            <span className="text-studio-400 font-medium">Estimated Total:</span>
-            <span className="text-white font-mono font-semibold">
-              ≈ {estimatedTotalDuration.toFixed(0)} seconds
-            </span>
-          </div>
-        </div>
-
-        {/* Multi-Clip Breakdown Action */}
-        <button
-          onClick={handleBreakOrPlan}
-          className="w-full py-2 bg-studio-800 hover:bg-studio-700 border border-studio-700 text-studio-200 hover:text-white rounded text-xs font-semibold uppercase tracking-wider flex items-center justify-center space-x-1.5 transition"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-studio-gold" />
-          <span>
-            {clipCount > 1 ? `AI Decompose into ${clipCount} Sequential Clips` : 'AI Plan Single Clip'}
-          </span>
-        </button>
-
-        {/* Primary Generation Buttons */}
-        <div className="space-y-2 pt-1">
-          {/* Generate Preview (CogVideoX-2B) */}
+          {/* SINGLE UNIFIED PRIMARY ACTION: Generate Video (CogVideoX-5B) */}
           <button
-            onClick={() => onGeneratePreview(
-              selectedClip?.id,
-              steps,
-              frames,
-              seed ? parseInt(seed, 10) : undefined,
-              negativePrompt.trim() || undefined,
-              loraPath.trim() || undefined
-            )}
+            onClick={handleGenerateCurrent}
             disabled={isGenerating}
-            className="w-full py-2.5 bg-studio-gold hover:bg-amber-400 disabled:opacity-50 text-studio-950 font-bold text-xs uppercase tracking-wider rounded shadow flex items-center justify-center space-x-2 transition"
+            className="w-full py-3 bg-studio-cinema hover:bg-rose-600 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-lg flex items-center justify-center space-x-2 transition transform active:scale-98"
           >
-            <Play className="w-3.5 h-3.5 fill-studio-950" />
-            <span>Generate Preview (CogVideoX-2B)</span>
-          </button>
-
-          {/* Generate Final (CogVideoX-5B-I2V) */}
-          <button
-            onClick={() => onGenerateFinal(
-              selectedClip?.id,
-              steps + 5,
-              frames,
-              seed ? parseInt(seed, 10) : undefined,
-              negativePrompt.trim() || undefined,
-              loraPath.trim() || undefined
-            )}
-            disabled={isGenerating}
-            className="w-full py-2.5 bg-studio-cinema hover:bg-rose-600 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded shadow flex items-center justify-center space-x-2 transition"
-          >
-            <Video className="w-3.5 h-3.5" />
-            <span>Generate Final (CogVideoX-5B-I2V)</span>
+            <Video className="w-4 h-4" />
+            <span>{isGenerating ? 'Generating Video...' : '🎬 Generate Video (CogVideoX-5B)'}</span>
           </button>
         </div>
 
-        {/* Collapsible Advanced Settings (Requirement #53) */}
+        {/* SECTION 3: Collapsible Advanced Settings */}
         <div className="border border-studio-800 rounded-lg overflow-hidden bg-studio-850">
           <button
             type="button"
@@ -217,7 +246,7 @@ export const GenerationPanel: React.FC<GenerationPanelProps> = ({
           >
             <span className="flex items-center space-x-1.5">
               <Settings className="w-3.5 h-3.5" />
-              <span>Advanced Settings</span>
+              <span>Model & Quality Settings</span>
             </span>
             {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
@@ -225,69 +254,61 @@ export const GenerationPanel: React.FC<GenerationPanelProps> = ({
           {showAdvanced && (
             <div className="p-3 border-t border-studio-800 space-y-3 text-xs">
               <div>
-                <label className="text-studio-400 block mb-1">Negative Prompt (Quality & Artifact Suppression)</label>
+                <label className="text-studio-400 block mb-1">Negative Prompt</label>
                 <textarea
                   rows={2}
                   value={negativePrompt}
                   onChange={(e) => setNegativePrompt(e.target.value)}
-                  placeholder="blurry, distorted, low quality, artifacts, watermark"
+                  placeholder="blurry, distorted, low quality, artifacts"
                   className="w-full bg-studio-900 border border-studio-700 text-white rounded p-1.5 text-[11px] focus:outline-none resize-none"
                 />
               </div>
 
               <div>
-                <label className="text-studio-400 block mb-1">Custom LoRA Weights (Optional Path)</label>
+                <label className="text-studio-400 block mb-1">Custom LoRA Weights (Optional)</label>
                 <input
                   type="text"
-                  placeholder="e.g. models/loras/film_grain.safetensors"
+                  placeholder="e.g. models/loras/cinematic.safetensors"
                   value={loraPath}
                   onChange={(e) => setLoraPath(e.target.value)}
                   className="w-full bg-studio-900 border border-studio-700 text-white rounded px-2 py-1 text-[11px] focus:outline-none"
                 />
               </div>
 
-              <div>
-                <label className="text-studio-400 block mb-1">Inference Steps ({steps})</label>
-                <input
-                  type="range"
-                  min={10}
-                  max={50}
-                  value={steps}
-                  onChange={(e) => setSteps(parseInt(e.target.value, 10))}
-                  className="w-full h-1 bg-studio-700 rounded"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-studio-400 block mb-1">Steps ({steps})</label>
+                  <input
+                    type="range"
+                    min={15}
+                    max={50}
+                    value={steps}
+                    onChange={(e) => setSteps(parseInt(e.target.value, 10))}
+                    className="w-full accent-rose-500 h-1 bg-studio-700 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="text-studio-400 block mb-1">Frames ({frames})</label>
+                  <input
+                    type="range"
+                    min={25}
+                    max={49}
+                    step={8}
+                    value={frames}
+                    onChange={(e) => setFrames(parseInt(e.target.value, 10))}
+                    className="w-full accent-rose-500 h-1 bg-studio-700 rounded"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="text-studio-400 block mb-1">Frames</label>
-                <select
-                  value={frames}
-                  onChange={(e) => setFrames(parseInt(e.target.value, 10))}
-                  className="w-full bg-studio-900 border border-studio-700 text-white rounded px-2 py-1"
-                >
-                  <option value={49}>49 frames (~6s @ 8fps)</option>
-                  <option value={81}>81 frames (~10s @ 8fps)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-studio-400 block mb-1">Seed (Optional)</label>
+                <label className="text-studio-400 block mb-1">Random Seed (Optional)</label>
                 <input
                   type="number"
                   placeholder="Random"
                   value={seed}
                   onChange={(e) => setSeed(e.target.value)}
-                  className="w-full bg-studio-900 border border-studio-700 text-white rounded px-2 py-1"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-studio-400">T4 Low VRAM Mode:</span>
-                <input
-                  type="checkbox"
-                  checked={lowVramMode}
-                  onChange={(e) => setLowVramMode(e.target.checked)}
-                  className="rounded text-studio-gold"
+                  className="w-full bg-studio-900 border border-studio-700 text-white rounded px-2 py-1 text-[11px] focus:outline-none"
                 />
               </div>
             </div>

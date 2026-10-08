@@ -1,3 +1,5 @@
+import os
+import time
 import json
 import re
 import requests
@@ -17,7 +19,43 @@ class OpenRouterProvider(AIProvider):
         self.max_tokens = settings.OPENROUTER_MAX_TOKENS
 
     def is_configured(self) -> bool:
-        return bool(self.api_key and len(self.api_key.strip()) > 5)
+        key = os.getenv("OPENROUTER_API_KEY", self.api_key)
+        return bool(key and len(key.strip()) > 5)
+
+    def test_connection(self) -> Dict[str, Any]:
+        """Tests OpenRouter AI connection, model availability, and measures latency."""
+        key = os.getenv("OPENROUTER_API_KEY", self.api_key)
+        if not self.is_configured():
+            return {
+                "ok": False,
+                "configured": False,
+                "error": "OpenRouter API key is not set. Add OPENROUTER_API_KEY in .env or Settings.",
+                "model": self.model
+            }
+        start = time.time()
+        try:
+            content = self._call_api(
+                system_prompt="You are a ping test assistant. Reply strictly with 'OK'.",
+                user_prompt="Ping test",
+                temperature=0.1
+            )
+            latency_ms = int((time.time() - start) * 1000)
+            return {
+                "ok": True,
+                "configured": True,
+                "model": os.getenv("OPENROUTER_MODEL", self.model) or "qwen/qwen3.5-flash-02-23",
+                "latency_ms": latency_ms,
+                "reply": content.strip()[:20]
+            }
+        except Exception as e:
+            latency_ms = int((time.time() - start) * 1000)
+            return {
+                "ok": False,
+                "configured": True,
+                "model": os.getenv("OPENROUTER_MODEL", self.model) or "qwen/qwen3.5-flash-02-23",
+                "latency_ms": latency_ms,
+                "error": str(e)
+            }
 
     def _extract_json_substring(self, text: str) -> str:
         """Extracts JSON substring from raw response even if surrounded by markdown."""

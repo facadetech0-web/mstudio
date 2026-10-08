@@ -149,39 +149,33 @@ class AIDirector:
                 ]
             )
 
-    def break_into_scenes(self, movie_bible: MovieBible) -> ScenesPlanResponse:
-        """Decomposes movie bible story into a sequence of scenes."""
+    def break_into_scenes(self, movie_bible: MovieBible, num_scenes: int = 3) -> ScenesPlanResponse:
+        """Decomposes movie bible story into a specified number of scenes (1-10)."""
+        num_scenes = max(1, min(10, int(num_scenes or 3)))
         if not self.is_available():
+            scenes = []
+            for i in range(1, num_scenes + 1):
+                scenes.append({
+                    "scene_number": i,
+                    "title": f"Scene {i}: Narrative Act {i}",
+                    "description": f"The story unfolds in scene {i}: {movie_bible.synopsis or movie_bible.story}",
+                    "location_name": movie_bible.locations[0].name if movie_bible.locations else "Cinematic Set",
+                    "characters": [c.name for c in movie_bible.characters] if movie_bible.characters else ["Protagonist"],
+                    "time_of_day": "Afternoon" if i % 2 == 1 else "Dusk",
+                    "weather": "Atmospheric mist",
+                    "visual_style": movie_bible.visual_style
+                })
             return ScenesPlanResponse(
                 project_title=movie_bible.title,
                 genre=movie_bible.genre,
                 visual_style=movie_bible.visual_style,
-                scenes=[
-                    {
-                        "scene_number": 1,
-                        "title": "The Approach",
-                        "description": f"The protagonist approaches the location under overcast skies.",
-                        "location_name": movie_bible.locations[0].name if movie_bible.locations else "Exterior",
-                        "characters": [c.name for c in movie_bible.characters],
-                        "time_of_day": "Afternoon",
-                        "weather": "Overcast mist",
-                        "visual_style": movie_bible.visual_style
-                    },
-                    {
-                        "scene_number": 2,
-                        "title": "Into the Depths",
-                        "description": f"Entering through the rusted doorway, discovering the machine.",
-                        "location_name": movie_bible.locations[0].name if movie_bible.locations else "Interior",
-                        "characters": [c.name for c in movie_bible.characters],
-                        "time_of_day": "Late Afternoon",
-                        "weather": "Atmospheric haze",
-                        "visual_style": movie_bible.visual_style
-                    }
-                ]
+                scenes=scenes
             )
 
         system_prompt = (
-            "You are an expert Film Director. Decompose the story into a sequence of cohesive cinematic scenes. "
+            "You are an expert Film Director and Screenplay Supervisor. "
+            f"Your mission is to decompose the story into EXACTLY {num_scenes} cohesive, cinematic scenes. "
+            f"You MUST generate exactly {num_scenes} scenes (from Scene 1 to Scene {num_scenes}). "
             "Ensure character, location, and temporal continuity between consecutive scenes."
         )
         user_prompt = (
@@ -190,8 +184,8 @@ class AIDirector:
             f"Story: {movie_bible.story}\n"
             f"Visual Style: {movie_bible.visual_style}\n"
             f"Available Locations: {[loc.name for loc in movie_bible.locations]}\n"
-            f"Available Characters: {[char.name for char in movie_bible.characters]}\n"
-            "Break this story into 2 to 5 well-structured cinematic scenes."
+            f"Available Characters: {[char.name for char in movie_bible.characters]}\n\n"
+            f"TASK: Generate EXACTLY {num_scenes} chronological scenes. Output valid JSON matching the schema with a list of {num_scenes} scene items."
         )
 
         return self.provider.generate_structured(system_prompt, user_prompt, ScenesPlanResponse)

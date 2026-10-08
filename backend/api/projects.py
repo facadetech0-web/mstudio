@@ -219,8 +219,8 @@ def plan_project_with_ai(project_id: str, req: PlanMovieRequest, db: Session = D
         )
         db.add(l_model)
 
-    # Break into scenes
-    scenes_plan = ai_director.break_into_scenes(bible)
+    # Break into scenes (1 to 10 scenes supported)
+    scenes_plan = ai_director.break_into_scenes(bible, num_scenes=req.num_scenes or 3)
     # Remove older scenes if regenerating
     db.query(Scene).filter(Scene.project_id == p.id).delete()
     for s_item in scenes_plan.scenes:
