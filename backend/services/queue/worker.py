@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
 from sqlalchemy.orm import Session
 
+from backend.config import settings
 from backend.database.session import SessionLocal
 from backend.models.db import Job, Clip
 from backend.services.video.manager import model_manager
