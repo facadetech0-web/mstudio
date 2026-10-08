@@ -50,6 +50,7 @@ class CogVideoX2BModel(VideoModel):
 
         # Apply T4 performance optimizations
         if self.device == "cuda" and torch.cuda.is_available():
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
             # T4 (Turing SM 7.5) has fast FP16 tensor cores and memory-efficient SDPA
             if hasattr(torch.backends.cuda, "enable_mem_efficient_sdp"):
                 torch.backends.cuda.enable_mem_efficient_sdp(True)
@@ -57,13 +58,15 @@ class CogVideoX2BModel(VideoModel):
                 torch.backends.cuda.enable_math_sdp(True)
 
             total_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            # CogVideoX-2B is only ~4.9GB in FP16 and fits completely in T4 16GB VRAM!
-            # Direct VRAM residence eliminates slow PCIe layer swapping, boosting speed 4x-5x!
-            if low_vram and total_vram_gb < 10.0:
-                generation_logger.info("Enabling model CPU offload for CogVideoX-2B (VRAM < 10GB)")
+            # CogVideoX-2B's pipeline (T5-XXL 4.9GB + Transformer 4.5GB + VAE 0.8GB + PyTorch context ~1.5GB)
+            # exceeds 14.56GB VRAM on T4 if all submodules reside in GPU simultaneously.
+            # enable_model_cpu_offload() swaps whole submodules once (T5 -> Transformer -> VAE),
+            # keeping peak VRAM under 6.5GB and running diffusion at full GPU speed without OOM.
+            if low_vram or total_vram_gb < 20.0 or settings.ENABLE_CPU_OFFLOAD:
+                generation_logger.info(f"Enabling model CPU offload for CogVideoX-2B (VRAM={total_vram_gb:.1f}GB < 20GB safe threshold)")
                 self.pipeline.enable_model_cpu_offload()
             else:
-                generation_logger.info(f"Moving CogVideoX-2B directly to GPU VRAM for maximum speed (total VRAM={total_vram_gb:.1f}GB)")
+                generation_logger.info(f"Moving CogVideoX-2B directly to GPU VRAM (total VRAM={total_vram_gb:.1f}GB)")
                 self.pipeline.to("cuda")
 
             # Disable diffusers safety checkers / black-frame filters if present

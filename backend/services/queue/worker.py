@@ -191,7 +191,7 @@ class GenerationWorker:
             output_path = (output_dir / output_filename).as_posix()
 
             # Determine low_vram flag from job or settings
-            is_low_vram = "low_vram" in job.resolution.lower() or "5b" in job.model.lower()
+            is_low_vram = settings.ENABLE_CPU_OFFLOAD or "low_vram" in job.resolution.lower() or "5b" in job.model.lower()
 
             # Execute generation via model manager
             model = model_manager.load_model(job.model, low_vram=is_low_vram)

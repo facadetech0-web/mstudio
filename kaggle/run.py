@@ -8,9 +8,10 @@ from pathlib import Path
 # Set environment defaults for Kaggle T4
 os.environ["DEVICE"] = "cuda"
 os.environ["DTYPE"] = "float16"
-os.environ["ENABLE_CPU_OFFLOAD"] = "false"
+os.environ["ENABLE_CPU_OFFLOAD"] = "true"
 os.environ["ENABLE_VAE_TILING"] = "true"
 os.environ["ENABLE_VAE_SLICING"] = "true"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 os.environ["PYTHONPATH"] = f"{os.getcwd()}:{os.environ.get('PYTHONPATH', '')}"
 os.environ["HF_HOME"] = os.path.abspath("models/hf_cache")
 os.environ["TRANSFORMERS_CACHE"] = os.path.abspath("models/hf_cache")
