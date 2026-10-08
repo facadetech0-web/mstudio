@@ -1,3 +1,5 @@
+import os
+import subprocess
 import threading
 import queue
 import time
@@ -9,9 +11,9 @@ from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.database.session import SessionLocal
-from backend.models.db import Job, Clip
+from backend.models.db import Job, Clip, Shot
 from backend.services.video.manager import model_manager
-from backend.logging_config import worker_logger
+from backend.logging_config import worker_logger, generation_logger
 
 class GenerationWorker:
     """
